@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>產品與價格查詢</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --card: #ffffff;
+    --ink: #2c2c2a;
+    --ink-secondary: #5f5e5a;
+    --border: #d3d1c7;
+    --accent: #0f6e56;
+    --accent-light: #e1f5ee;
+    --danger: #a32d2d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    padding: 16px;
+  }
+  header { max-width: 720px; margin: 0 auto 16px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .subtitle { font-size: 13px; color: var(--ink-secondary); }
+  .container { max-width: 720px; margin: 0 auto; }
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .tab-btn {
+    padding: 8px 16px;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--ink-secondary);
+    cursor: pointer;
+  }
+  .tab-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .search-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+  input[type="text"] {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 15px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--ink);
+  }
+  button {
+    padding: 10px 16px;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .card-info { flex: 1; min-width: 0; }
+  .card-title { font-weight: 600; font-size: 15px; }
+  .card-sub { font-size: 13px; color: var(--ink-secondary); margin-top: 2px; }
+  .price-value { font-size: 15px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+  .stock-edit { display: flex; align-items: center; gap: 6px; }
+  .stock-edit input {
+    width: 70px;
+    padding: 6px 8px;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .status { font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .status.ok { color: var(--accent); }
+  .status.err { color: var(--danger); }
+  .empty { text-align: center; color: var(--ink-secondary); padding: 40px 0; font-size: 14px; }
+  .loading { text-align: center; color: var(--ink-secondary); padding: 20px 0; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>產品與價格查詢</h1>
+  <div class="subtitle">切換分頁查詢產品庫存或售價資料</div>
+</header>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="products">產品資料表</button>
+    <button class="tab-btn" data-tab="prices">價格表</button>
+  </div>
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="輸入圖號、圖名或廠商搜尋">
+    <button class="primary" id="searchBtn">搜尋</button>
+  </div>
+  <div id="results"></div>
+</div>
+
+<script>
+// ============================================
+// 換成你部署後拿到的 Apps Script 網址
+// ============================================
+const API_URL = "https://script.google.com/macros/s/AKfycbwiQ-2M-ygm5YRdZUN5KR0KIF4PKIg_x7bLeQdkTe58Zp4PbCQbl1IfmF-P65nlp9xC6Q/exec";
+
+let currentTab = "products"; // products 或 prices
+
+const resultsEl = document.getElementById("results");
+const searchInput = document.getElementById("searchInput");
+const searchBtn = document.getElementById("searchBtn");
+const tabBtns = document.querySelectorAll(".tab-btn");
+
+tabBtns.forEach(btn => {
+  btn.addEventListener("click", () => {
+    tabBtns.forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentTab = btn.dataset.tab;
+    searchInput.value = "";
+    search();
+  });
+});
+
+async function search() {
+  const keyword = searchInput.value.trim();
+  resultsEl.innerHTML = '<div class="loading">搜尋中…</div>';
+  try {
+    const res = await fetch(`${API_URL}?action=search&keyword=${encodeURIComponent(keyword)}&target=${currentTab}`);
+    const data = await res.json();
+    if (currentTab === "products") {
+      renderProducts(data);
+    } else {
+      renderPrices(data);
+    }
+  } catch (err) {
+    resultsEl.innerHTML = '<div class="empty">連線失敗，請確認網路或稍後再試</div>';
+  }
+}
+
+function renderProducts(items) {
+  if (!items || items.length === 0) {
+    resultsEl.innerHTML = '<div class="empty">找不到符合的資料</div>';
+    return;
+  }
+  resultsEl.innerHTML = "";
+  items.forEach(item => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-info">
+        <div class="card-title">${escapeHtml(item["圖號"] || "")}　${escapeHtml(item["圖名"] || "")}</div>
+        <div class="card-sub">${escapeHtml(item["庫存位置"] || "")} ・ ${escapeHtml(item["公司"] || "")}</div>
+        <div class="status" id="status-${cssSafe(item["圖號"])}"></div>
+      </div>
+      <div class="stock-edit">
+        <input type="number" value="${item["庫存量"] || 0}" id="stock-${cssSafe(item["圖號"])}">
+        <button data-code="${escapeHtml(item["圖號"])}">更新</button>
+      </div>
+    `;
+    resultsEl.appendChild(card);
+  });
+
+  document.querySelectorAll(".stock-edit button").forEach(btn => {
+    btn.addEventListener("click", () => updateStock(btn.dataset.code));
+  });
+}
+
+function renderPrices(items) {
+  if (!items || items.length === 0) {
+    resultsEl.innerHTML = '<div class="empty">找不到符合的資料</div>';
+    return;
+  }
+  resultsEl.innerHTML = "";
+  items.forEach(item => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-info">
+        <div class="card-title">${escapeHtml(item["圖號"] || "")}　${escapeHtml(item["品名"] || "")}</div>
+        <div class="card-sub">${escapeHtml(item["廠商名稱"] || "")}${item["備註"] ? " ・ " + escapeHtml(item["備註"]) : ""}</div>
+      </div>
+      <div class="price-value">NT$ ${escapeHtml(item["調整後單價"] || item["原單價"] || "")}</div>
+    `;
+    resultsEl.appendChild(card);
+  });
+}
+
+async function updateStock(code) {
+  const input = document.getElementById(`stock-${cssSafe(code)}`);
+  const statusEl = document.getElementById(`status-${cssSafe(code)}`);
+  const newValue = input.value;
+
+  if (newValue === "" || isNaN(newValue)) {
+    statusEl.textContent = "請輸入有效數字";
+    statusEl.className = "status err";
+    return;
+  }
+
+  statusEl.textContent = "更新中…";
+  statusEl.className = "status";
+
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify({ action: "updateStock", 圖號: code, 新庫存: Number(newValue) })
+    });
+    const result = await res.json();
+    if (result.success) {
+      statusEl.textContent = "已更新";
+      statusEl.className = "status ok";
+    } else {
+      statusEl.textContent = result.message || "更新失敗";
+      statusEl.className = "status err";
+    }
+  } catch (err) {
+    statusEl.textContent = "連線失敗，請重試";
+    statusEl.className = "status err";
+  }
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, m => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[m]));
+}
+function cssSafe(str) {
+  return String(str).replace(/[^a-zA-Z0-9]/g, "_");
+}
+
+searchBtn.addEventListener("click", search);
+searchInput.addEventListener("keypress", e => { if (e.key === "Enter") search(); });
+
+search();
+</script>
+
+</body>
+</html>
