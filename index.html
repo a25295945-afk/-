@@ -141,13 +141,9 @@ tabBtns.forEach(btn => {
 async function search() {
   const keyword = searchInput.value.trim();
   resultsEl.innerHTML = '<div class="loading">搜尋中…</div>';
+  const url = `${API_URL}?action=search&keyword=${encodeURIComponent(keyword)}&target=${currentTab}`;
   try {
-    const url = `${API_URL}?action=search&keyword=${encodeURIComponent(keyword)}&target=${currentTab}`;
-    const res = await fetch(url, { redirect: "follow" });
-    if (!res.ok) {
-      throw new Error("HTTP " + res.status);
-    }
-    const data = await res.json();
+    const data = await callApi(url, "GET");
     if (currentTab === "products") {
       renderProducts(data);
     } else {
@@ -156,6 +152,33 @@ async function search() {
   } catch (err) {
     resultsEl.innerHTML = `<div class="empty">連線失敗：${escapeHtml(err.message || String(err))}</div>`;
   }
+}
+
+// 用 XMLHttpRequest 呼叫，讓瀏覽器原生處理 Google Apps Script 的 302 轉址，
+// 這是繞開 fetch() 在轉址時遺失 CORS 標頭問題的做法
+function callApi(url, method, bodyObj) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    if (method === "POST") {
+      xhr.setRequestHeader("Content-Type", "text/plain;charset=utf-8");
+    }
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch (e) {
+          reject(new Error("回傳格式錯誤：" + xhr.responseText.slice(0, 100)));
+        }
+      } else {
+        reject(new Error("HTTP " + xhr.status));
+      }
+    };
+    xhr.onerror = function () {
+      reject(new Error("網路連線錯誤（可能是CORS或網址錯誤）"));
+    };
+    xhr.send(method === "POST" ? JSON.stringify(bodyObj) : null);
+  });
 }
 
 function renderProducts(items) {
@@ -221,16 +244,7 @@ async function updateStock(code) {
   statusEl.className = "status";
 
   try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      redirect: "follow",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "updateStock", 圖號: code, 新庫存: Number(newValue) })
-    });
-    if (!res.ok) {
-      throw new Error("HTTP " + res.status);
-    }
-    const result = await res.json();
+    const result = await callApi(API_URL, "POST", { action: "updateStock", 圖號: code, 新庫存: Number(newValue) });
     if (result.success) {
       statusEl.textContent = "已更新";
       statusEl.className = "status ok";
