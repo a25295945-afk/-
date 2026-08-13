@@ -142,7 +142,11 @@ async function search() {
   const keyword = searchInput.value.trim();
   resultsEl.innerHTML = '<div class="loading">搜尋中…</div>';
   try {
-    const res = await fetch(`${API_URL}?action=search&keyword=${encodeURIComponent(keyword)}&target=${currentTab}`);
+    const url = `${API_URL}?action=search&keyword=${encodeURIComponent(keyword)}&target=${currentTab}`;
+    const res = await fetch(url, { redirect: "follow" });
+    if (!res.ok) {
+      throw new Error("HTTP " + res.status);
+    }
     const data = await res.json();
     if (currentTab === "products") {
       renderProducts(data);
@@ -150,7 +154,7 @@ async function search() {
       renderPrices(data);
     }
   } catch (err) {
-    resultsEl.innerHTML = '<div class="empty">連線失敗，請確認網路或稍後再試</div>';
+    resultsEl.innerHTML = `<div class="empty">連線失敗：${escapeHtml(err.message || String(err))}</div>`;
   }
 }
 
