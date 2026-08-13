@@ -223,8 +223,13 @@ async function updateStock(code) {
   try {
     const res = await fetch(API_URL, {
       method: "POST",
+      redirect: "follow",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action: "updateStock", 圖號: code, 新庫存: Number(newValue) })
     });
+    if (!res.ok) {
+      throw new Error("HTTP " + res.status);
+    }
     const result = await res.json();
     if (result.success) {
       statusEl.textContent = "已更新";
@@ -234,7 +239,7 @@ async function updateStock(code) {
       statusEl.className = "status err";
     }
   } catch (err) {
-    statusEl.textContent = "連線失敗，請重試";
+    statusEl.textContent = "連線失敗：" + (err.message || String(err));
     statusEl.className = "status err";
   }
 }
